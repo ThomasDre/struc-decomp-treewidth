@@ -8,33 +8,65 @@
 #include <boost/graph/erdos_renyi_generator.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/random/linear_congruential.hpp>
+#include <boost/graph/copy.hpp>
 #include <getopt.h>
+#include <string>
+#include <chrono>
+
 
 using namespace std;
 using namespace boost;
 
 struct VertexProperties {
+    string label;
     vector<string> nodes;
 };
 
+struct do_nothing
+{
+    template <typename VertexOrEdge1, typename VertexOrEdge2>
+    void operator()(const VertexOrEdge1& , VertexOrEdge2& ) const
+    {
+    }
+};
+
 typedef boost::property<boost::vertex_name_t, std::string, VertexProperties> VertexProperty;
-typedef boost::adjacency_list<mapS, listS, undirectedS, property<vertex_name_t,string>> Graph;
+typedef boost::adjacency_list<mapS, listS, undirectedS, VertexProperties> Graph;
 typedef boost::erdos_renyi_iterator<boost::minstd_rand, Graph> ERGen;
 typedef graph_traits<Graph>::vertex_descriptor Vertex;
 typedef graph_traits<Graph>::edge_descriptor Edge;
 typedef graph_traits<Graph>::adjacency_iterator AdjacencyIterator;
 
+map<Vertex, Vertex> lookup;
 
-map<Vertex, string> lookup;
+void create_lookup_table(Graph& orig, Graph& g) {
+    graph_traits <Graph>::vertex_iterator i,end;
+    vector<Vertex> orig_vertices;
+    for (tie(i,end) = vertices(orig); i != end; i++) {
+        orig_vertices.push_back(*i);
+    }
+    vector<Vertex> g_vertices;
+    for (tie(i,end) = vertices(g); i != end; i++) {
+        g_vertices.push_back(*i);
+    }
 
+    for (int i = 0; i <  orig_vertices.size(); i++) {
+        Vertex orig_v = orig_vertices[i];
+        Vertex g_v = g_vertices[i];
+        lookup[g_v] = orig_v;
+    }
 
-string join(Graph g, const vector<Vertex>& v, const string& delim) {
+}
+
+string join(Graph& g, const vector<Vertex>& v, const string& delim) {
     ostringstream s;
-    for (const auto& i : v) {
+    for (const Vertex i : v) {
         if (&i != &v[0]) {
             s << delim;
         }
-        s << get(vertex_name, g, i);
+        auto prop_map = get(vertex_bundle, g);
+        VertexProperties vp = prop_map[i];
+        s << vp.label;
     }
     return s.str();
 }
@@ -49,6 +81,24 @@ void print_usage() {
               << "  --help                                              Display this help message\n";
 }
 
+void update_prop_map(Graph& orig_g, Graph& g) {
+    auto prop_map = get(vertex_bundle, orig_g);
+    graph_traits <Graph>::vertex_iterator i, end;
+
+    vector<VertexProperties> vps;
+    for (tie(i,end) = vertices(orig_g); i!=end; i++) {
+        VertexProperties vp_i = prop_map[*i];
+        vps.push_back(vp_i);
+    }
+
+    int index = 0;
+    for (tie(i,end) = vertices(g); i != end; i++) {
+        VertexProperties vp_i = vps[index];
+        prop_map[*i] = vp_i;
+        index++;
+    }
+}
+
 void print_graph(Graph& g) {
       // Output the graph
         //auto vertex_idMap = get(vertex_index, g);
@@ -59,11 +109,13 @@ void print_graph(Graph& g) {
             cout << "Empty graph" << endl;
         } else {
             for (tie(i, end) = vertices(g); i != end; ++i) {
-                cout << get(vertex_name, g, *i) << ": ";
+                auto prop_map = get(vertex_bundle, g);
+                VertexProperties vp_i = prop_map[*i];
+                cout << vp_i.label << ": ";
 
                 for (tie(ai, a_end) = adjacent_vertices(*i, g); ai != a_end; ++ai) {
-                    cout << get(vertex_name,g, *ai);
-                    //cout << lookup[*ai];
+                    VertexProperties vp_ai = prop_map[*ai];
+                    cout << vp_ai.label;
                     if (boost::next(ai) != a_end)
                         cout << ", ";
                 }
@@ -72,14 +124,6 @@ void print_graph(Graph& g) {
         }
 }
 
-void update_lookup_table(Graph& g) {
-    graph_traits <Graph>::vertex_iterator i, end;
-
-    for (tie(i, end) = vertices(g); i != end; i++) {
-
-    }
-    vertices(g);
-}
 
 vector<string> get_tokens_from_line(string s) {
     stringstream ss(s);
@@ -124,22 +168,41 @@ void add_edge(Graph& g, const string& v1, const string& v2, const string& label,
 // Function to add a vertex with a label
 void add_vertex(Graph& g, const string& v, const string& label,
                 map<string, Vertex>& vertex_map) {
+    VertexProperties vp;
+    vp.label = label;
     if (vertex_map.find(v) == vertex_map.end()) {
-        Vertex vertex = add_vertex(g);
+        Vertex vertex = add_vertex(vp, g);
         vertex_map[v] = vertex;
-        put(vertex_name, g, vertex, label);
+        // put(vertex_name, g, vertex, label);
     } else {
-        Vertex vertex = vertex_map[v];
-        put(vertex_name, g, vertex, label);
+        Vertex vertex = vertex_map[vp, v];
+        auto prop_map = get(vertex_bundle, g);
+        prop_map[vertex] = vp;
+        // put(vertex_name, g, vertex, label);
     }
 }
 
 
-/*Graph::vertex_descriptor add_vertex(const VertexProperties& p, Graph& g) {
-    Graph::vertex_descriptor v = boost::add_vertex(g);
-    g[v] = p;
+Graph::vertex_descriptor add_vertex(const VertexProperties& p, Graph& g) {
+    Graph::vertex_descriptor v = boost::add_vertex(p, g);
     return v;
-}*/
+}
+
+int get_tree_width(Graph& decomposition) {
+    graph_traits <Graph>::vertex_iterator i, end;
+    auto prop_map = get(vertex_bundle, decomposition);
+    int max_bag_size = 0;
+
+    for (tie(i,end) = vertices(decomposition); i != end; i++) {
+        VertexProperties vp_i = prop_map[*i];
+        vector<string> labels = vp_i.nodes;
+        if (labels.size() > max_bag_size) {
+            max_bag_size = labels.size();
+        }
+    }
+
+    return max_bag_size - 1;
+}
 
 void read_input(string file, Graph& g) {
     // Open the CSV file
@@ -185,11 +248,6 @@ void read_input(string file, Graph& g) {
         }
     }
 
-    map<string,Vertex>::iterator it;
-    for (it = vertex_map.begin(); it != vertex_map.end(); it++){
-            //How do I access each element?
-            lookup[it->second] = it->first;
-    }
 
 
     infile.close();
@@ -233,16 +291,19 @@ Vertex find_min_fill_in_vertex(Graph& g) {
     int min_fill_in_edges = INT_MAX;
 
     for (tie(v,end) = vertices(g); v != end; v++) {
+        // for all vertices in G: |V|
         int fill_in_edges = 0;
         // assume we remove v, how many fill in edges do we need to add
         //
         pair<AdjacencyIterator, AdjacencyIterator> neighbours_of_v = adjacent_vertices(*v, g);
         for (AdjacencyIterator adjacent_v = neighbours_of_v.first; adjacent_v != neighbours_of_v.second; adjacent_v++) {
+            // for all neighbours of current v: |V|
             pair<AdjacencyIterator, AdjacencyIterator> neighbours_of_current_iters = adjacent_vertices(*adjacent_v, g);
             vector<Vertex> neighbours_of_current;
             copy(neighbours_of_current_iters.first, neighbours_of_current_iters.second, std::back_inserter(neighbours_of_current));
             pair<AdjacencyIterator, AdjacencyIterator> neighbours_of_v_tmp = adjacent_vertices(*v, g);
             for (AdjacencyIterator adjacent_to_orig_v = neighbours_of_v_tmp.first; adjacent_to_orig_v != neighbours_of_v_tmp.second; adjacent_to_orig_v++) {
+                // for all neighbours of current v: |V|
                 if (adjacent_to_orig_v != adjacent_v) {
                     if (find(neighbours_of_current.begin(), neighbours_of_current.end(), *adjacent_to_orig_v) == neighbours_of_current.end()) {
                         fill_in_edges += 1;
@@ -265,7 +326,8 @@ Vertex find_min_fill_in_vertex(Graph& g) {
 Vertex find_max_neighbours_in_ordering_vertex(Graph& g, vector<Vertex>& ordering) {
     graph_traits <Graph>::vertex_iterator v, end;
     Vertex max_neighbours_in_ordering_vertex;
-    int max_num_of_neighbours_in_ordering = 0;
+    int max_num_of_neighbours_in_ordering = -1;
+
 
     for (tie(v,end) = vertices(g); v != end; v++) {
         if (find(ordering.begin(), ordering.end(), *v) != ordering.end()) {
@@ -291,69 +353,70 @@ Vertex find_max_neighbours_in_ordering_vertex(Graph& g, vector<Vertex>& ordering
     return max_neighbours_in_ordering_vertex;
 }
 
-vector<Vertex> min_degree_elimination_heuristic(Graph g) {
+vector<Vertex> min_degree_elimination_heuristic(Graph g, Graph& orig) {
+    update_prop_map(orig, g);
+    create_lookup_table(orig,g);
     vector<Vertex> ordering;
 
     int vertices_size = num_vertices(g);
 
     for (int i = 0; i < vertices_size; i++) {
         Vertex min_deg_vertex = find_min_deg_vertex(g);
-        ordering.push_back(min_deg_vertex);
+        ordering.push_back(lookup[min_deg_vertex]);
         remove_vertex_and_reconnect_graph(g, min_deg_vertex);
-        cout << endl << endl;
-        print_graph(g);
-        cout << endl << endl;
     }
 
     return ordering;
 }
 
-vector<Vertex> min_fill_in_eliminiation_heuristic(Graph g) {
+vector<Vertex> min_fill_in_eliminiation_heuristic(Graph g, Graph& orig) {
+    update_prop_map(orig, g);
+    create_lookup_table(orig,g);
     vector<Vertex> ordering;
 
     int vertices_size = num_vertices(g);
 
     for (int i = 0; i < vertices_size; i++) {
         Vertex min_fill_in_vertex = find_min_fill_in_vertex(g);
-        ordering.push_back(min_fill_in_vertex);
+        ordering.push_back(lookup[min_fill_in_vertex]);
         remove_vertex_and_reconnect_graph(g, min_fill_in_vertex);
-        cout << endl << endl;
-        print_graph(g);
-        cout << endl << endl;
     }
 
     return ordering;
 }
 
 
-vector<Vertex> max_card_heuristic(Graph g) {
+vector<Vertex> max_card_heuristic(Graph g, Graph& orig) {
+    update_prop_map(orig, g);
+    create_lookup_table(orig,g);
     vector<Vertex> ordering;
 
     int vertices_size = num_vertices(g);
 
     // select some vertex as initial first element
     Vertex init_vertex = find_min_deg_vertex(g);
-    ordering.push_back(init_vertex);
+    ordering.push_back(lookup[init_vertex]);
 
     for (int i = 1; i < vertices_size; i++) {
-        // select vertex with has highest num of neighbours in ordering
-        Vertex vertex = find_max_neighbours_in_ordering_vertex(g, ordering);
+        // select vertex which has highest num of neighbours in ordering
+        Vertex vertex = find_max_neighbours_in_ordering_vertex(orig, ordering);
         ordering.push_back(vertex);
     }
 
     return ordering;
 }
 
-/*Vertex find_decomposition_node(Graph& g, Graph& decomposition, Vertex vertex) {
+Vertex find_decomposition_node(Graph& g, Graph& decomposition, Vertex vertex) {
     graph_traits <Graph>::vertex_iterator v, end;
+    auto prop_map = get(vertex_bundle, g);
     for (tie(v,end) = vertices(decomposition); v != end; v++) {
-        get(vertex_name, decomposition)[source(*v,decomposition)];
         VertexProperties vp = decomposition[*v];
         vector<string> labels = vp.nodes;
         pair<AdjacencyIterator, AdjacencyIterator> adjacent_to_vertex = adjacent_vertices(vertex, g);
         bool all_contained = true;
         for (AdjacencyIterator ai = adjacent_to_vertex.first; ai != adjacent_to_vertex.second; ai++) {
-            if (find(labels.begin(), labels.end(), lookup[*ai]) != labels.end()) {
+            VertexProperties vp_ai = prop_map[*ai];
+            if (find(labels.begin(), labels.end(), vp_ai.label) == labels.end()) {
                 all_contained = false;
             }
         }
@@ -365,63 +428,141 @@ vector<Vertex> max_card_heuristic(Graph g) {
 }
 
 
-Graph create_tree_decomposition(Graph& g, Graph& decomposition, vector<Vertex> ordering) {
+Graph create_tree_decomposition(Graph& g, Graph& help, Graph& decomposition, vector<Vertex> ordering) {
+    auto prop_map = get(vertex_bundle, g);
     if (num_vertices(g) == 1) {
         // return basic node new tree node,label with current node
         auto vertex_pair = boost::vertices(g);
         Graph::vertex_descriptor v = *vertex_pair.first;
         VertexProperties vp;
-        vp.nodes.push_back(lookup[v]);
+        VertexProperties vp_v = prop_map[v];
+        vp.nodes.push_back(vp_v.label);
         add_vertex(vp, decomposition);
+        return decomposition;
     }
     Vertex vertex = ordering.front();
     ordering.erase(ordering.begin());
+
+    //  TODO i want to copy g at this stage before removing edges in the next line
+    Graph g_copy = Graph(g);
+    create_lookup_table(g_copy,g);
+
     remove_vertex_and_reconnect_graph(g, vertex);
-    decomposition = create_tree_decomposition(g, decomposition, ordering);
-    Vertex decomposition_node = find_decomposition_node(g, decomposition, vertex);
+    decomposition = create_tree_decomposition(g, help, decomposition, ordering);
+    Vertex decomposition_node = find_decomposition_node(g_copy, decomposition, lookup[vertex]);
+    VertexProperties vp_decomposition_node = prop_map[decomposition_node];
     // new decomp_node, make labels with vertex and all its neighbours
     // add edge between decomposition_node and new decomp_node
     VertexProperties vp;
-    vp.nodes.push_back(lookup[vertex]);
-    pair<AdjacencyIterator, AdjacencyIterator> neighbours_of_current = adjacent_vertices(vertex, g);
+    //vp.nodes.push_back(vp_decomposition_node.label);
+    VertexProperties vp_vertex = prop_map[lookup[vertex]];
+    vp.nodes.push_back(vp_vertex.label);
+    pair<AdjacencyIterator, AdjacencyIterator> neighbours_of_current = adjacent_vertices(lookup[vertex], g);
     for (AdjacencyIterator ai = neighbours_of_current.first; ai != neighbours_of_current.second; ai++) {
-        vp.nodes.push_back(lookup[*ai]);
+        VertexProperties vp_ai = prop_map[*ai];
+        vp.nodes.push_back(vp_ai.label);
     }
     Vertex new_node = add_vertex(vp, decomposition);
     add_edge(decomposition_node, new_node, decomposition);
     return decomposition;
 }
 
-Graph create_tree_decomposition(Graph g, vector<Vertex> ordering) {
+Graph create_tree_decomposition(Graph& g, Graph help, vector<Vertex> ordering) {
     Graph tree_decomposition;
-    create_tree_decomposition(g, tree_decomposition, ordering);
+    create_tree_decomposition(g, help, tree_decomposition, ordering);
     return tree_decomposition;
 }
-*/
+
+void save_data(const std::string &filename, const std::vector<int> &x) {
+    std::ofstream file(filename);
+    if (file.is_open()) {
+        for (size_t i = 0; i < x.size(); ++i) {
+            file << x[i] << endl;
+        }
+        file.close();
+    } else {
+        std::cerr << "Unable to open file: " << filename << "\n";
+    }
+}
+
+void plot_data(const std::string &filename, const std::string &xlabel, const std::string &ylabel, const std::string &title) {
+    std::string command = "gnuplot -e \"set terminal png; set output '";
+    command += title + ".png'; set title '" + title + "'; set xlabel '" + xlabel + "'; set ylabel '" + ylabel + "'; plot '";
+    command += filename + "' using 1:2 with points pt 7\"";
+    system(command.c_str());
+}
 
 void run_experiment() {
     minstd_rand gen;
     // Create graph with 100 nodes and edges with probability 0.05
-    vector<int> n_values = {10,100,1000};
-    vector<double> p_values = {1/4,1/2,3/4};
+    vector<int> n_values = {1000,10,1000};
+    vector<double> p_values = {0.75,0.5,0.75};
 
     for (const int& n: n_values) {
         for (const double& p: p_values) {
             // run tests on given n,p setting
+            vector<int> min_deg_dps;
+            vector<int> min_fill_in_dps;
+            vector<int> max_card_dps;
             for (int i = 0; i < 100; i++) {
                 Graph g(ERGen(gen, n, p), ERGen(), n);
+                Graph g1 = Graph(g);
+                Graph g2 = Graph(g);
 
-                /*vector<Vertex> min_deg_ordering = min_degree_elimination_heuristic(g);
-                vector<Vertex> min_fill_in_ordering = min_fill_in_eliminiation_heuristic(g);
-                vector<Vertex> max_card_ordering = max_card_heuristic(g);
 
-                Graph min_deg_tree_decomposition = create_tree_decomposition(g, min_deg_ordering);
-                Graph min_fill_in_tree_decomposition = create_tree_decomposition(g, min_fill_in_ordering);
-                Graph max_card_tree_decomposition = create_tree_decomposition(g, max_card_ordering);
-                */
+                std::chrono::steady_clock::time_point begin_t1 = std::chrono::steady_clock::now();
+                vector<Vertex> min_deg_ordering = min_degree_elimination_heuristic(g, g);
+                std::chrono::steady_clock::time_point end_t1 = std::chrono::steady_clock::now();
+                std::cout << "Time difference min_deg_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t1 - begin_t1).count())/1000000.0 << "[s]" << std::endl;
 
+                std::chrono::steady_clock::time_point begin_t2 = std::chrono::steady_clock::now();
+                vector<Vertex> min_fill_in_ordering = min_fill_in_eliminiation_heuristic(g1, g1);
+                std::chrono::steady_clock::time_point end_t2 = std::chrono::steady_clock::now();
+                std::cout << "Time difference min_fill_in_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t2 - begin_t2).count())/1000000.0  << "[s]" << std::endl;
+
+                std::chrono::steady_clock::time_point begin_t3 = std::chrono::steady_clock::now();
+                vector<Vertex> max_card_ordering = max_card_heuristic(g2, g2);
+                std::chrono::steady_clock::time_point end_t3 = std::chrono::steady_clock::now();
+                std::cout << "Time difference max_card_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t3 - begin_t3).count())/1000000.0  << "[s]" << std::endl;
+
+                std::chrono::steady_clock::time_point begin_dec1 = std::chrono::steady_clock::now();
+                Graph min_deg_tree_decomposition = create_tree_decomposition(g, g, min_deg_ordering);
+                std::chrono::steady_clock::time_point end_dec1 = std::chrono::steady_clock::now();
+                std::cout << "Time difference min_deg_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec1 - begin_dec1).count())/1000000.0  << "[s]" << std::endl;
+
+                std::chrono::steady_clock::time_point begin_dec2 = std::chrono::steady_clock::now();
+                Graph min_fill_in_tree_decomposition = create_tree_decomposition(g1, g1, min_fill_in_ordering);
+                std::chrono::steady_clock::time_point end_dec2 = std::chrono::steady_clock::now();
+                std::cout << "Time difference min_fill_in_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec2 - begin_dec2).count())/1000000.0  << "[s]" << std::endl;
+
+                std::chrono::steady_clock::time_point begin_dec3 = std::chrono::steady_clock::now();
+                Graph max_card_tree_decomposition = create_tree_decomposition(g2, g2, max_card_ordering);
+                std::chrono::steady_clock::time_point end_dec3 = std::chrono::steady_clock::now();
+                std::cout << "Time difference max_card_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec3 - begin_dec3).count())/1000000.0  << "[ss]" << std::endl;
+
+                int tw_min_deg = get_tree_width(min_deg_tree_decomposition);
+                int tw_min_fill_in = get_tree_width(min_fill_in_tree_decomposition);
+                int tw_max_card = get_tree_width(max_card_tree_decomposition);
+
+                min_deg_dps.push_back(tw_min_deg);
+                min_fill_in_dps.push_back(tw_min_fill_in);
+                max_card_dps.push_back(tw_max_card);
+
+                cout << tw_min_deg << "," << tw_min_fill_in << "," << tw_max_card << endl;
             //
             }
+
+            string min_deg_results = "min_deg_" + to_string(n) + "_" + to_string(p) + "_results.dat";
+            string min_fill_in_results = "min_fill_in_" + to_string(n) + "_" + to_string(p) + "_results.dat";
+            string max_card_results = "max_card_" + to_string(n) + "_" + to_string(p) + "_results.dat";
+
+            save_data("results/" + min_deg_results, min_deg_dps);
+            save_data("results/" + min_fill_in_results, min_fill_in_dps);
+            save_data("results/" + max_card_results, max_card_dps);
+
+            //plot_data("min_deg_vs_min_fill_in.dat", "min_deg_dps", "min_fill_in_dps", "min_deg_vs_min_fill_in");
+            //plot_data("min_deg_vs_max_card.dat", "min_deg_dps", "max_card_dps", "min_deg_vs_max_card");
+            //plot_data("min_fill_in_vs_max_card.dat", "min_fill_in_dps", "max_card_dps", "min_fill_in_vs_max_card");
         }
     }
 
@@ -505,11 +646,11 @@ int main(int argc, char* argv[]) {
 
         // min-deg|min-fill|max-card
         if(elimination_ordering_type == "min-deg") {
-            elimination_ordering = min_degree_elimination_heuristic(g);
+            elimination_ordering = min_degree_elimination_heuristic(g, g);
         } else if (elimination_ordering_type == "min-fill") {
-            elimination_ordering = min_fill_in_eliminiation_heuristic(g);
+            elimination_ordering = min_fill_in_eliminiation_heuristic(g, g);
         } else if (elimination_ordering_type == "max-card") {
-            elimination_ordering = max_card_heuristic(g);
+            elimination_ordering = max_card_heuristic(g, g);
         } else {
             cerr << "Error: Unknown elimination ordering heuristic";
             return 1;
@@ -523,7 +664,9 @@ int main(int argc, char* argv[]) {
         Graph decomposition;
 
         if (treeDecomposition) {
-            //decomposition = create_tree_decomposition(g, elimination_ordering);
+            decomposition = create_tree_decomposition(g, g, elimination_ordering);
+            print_graph(decomposition);
+            cout << get_tree_width(decomposition) << endl;
         }
 
 
