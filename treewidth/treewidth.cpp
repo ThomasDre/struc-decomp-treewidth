@@ -12,6 +12,8 @@
 #include <getopt.h>
 #include <string>
 #include <chrono>
+#include <iomanip>
+#include <ctime>
 
 
 using namespace std;
@@ -22,13 +24,6 @@ struct VertexProperties {
     vector<string> nodes;
 };
 
-struct do_nothing
-{
-    template <typename VertexOrEdge1, typename VertexOrEdge2>
-    void operator()(const VertexOrEdge1& , VertexOrEdge2& ) const
-    {
-    }
-};
 
 typedef boost::property<boost::vertex_name_t, std::string, VertexProperties> VertexProperty;
 typedef boost::adjacency_list<mapS, listS, undirectedS, VertexProperties> Graph;
@@ -60,15 +55,99 @@ void create_lookup_table(Graph& orig, Graph& g) {
 
 string join(Graph& g, const vector<Vertex>& v, const string& delim) {
     ostringstream s;
+    int index = 0;
     for (const Vertex i : v) {
-        if (&i != &v[0]) {
-            s << delim;
-        }
         auto prop_map = get(vertex_bundle, g);
         VertexProperties vp = prop_map[i];
         s << vp.label;
+        if (index < (v.size() - 1)) {
+            s << delim;
+        }
+        index++;
     }
     return s.str();
+}
+
+std::string vector_to_string(const vector<string>& vec) {
+    stringstream result;
+    for (size_t i = 0; i < vec.size(); ++i) {
+        result << vec[i];
+        if (i < vec.size() - 1) {
+            result << ";";
+        }
+    }
+    return result.str();
+}
+
+void store_ordering(vector<Vertex>& elimination_ordering, Graph& g, string type) {
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream oss;
+    oss << put_time(&tm, "%d-%m-%Y %H-%M-%S");
+    string filename = "results/eliminationOrderings/" + type + "_" + oss.str() + ".txt";
+    ofstream outFile(filename);
+    if (!outFile.is_open()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return;
+    }
+
+    auto prop_map = get(vertex_bundle, g);
+
+    for (const auto& vertex : elimination_ordering) {
+        VertexProperties vp_vertex = prop_map[vertex];
+        outFile << vp_vertex.label << " ";
+    }
+
+    outFile.close();
+}
+
+void store_decomposition(Graph& decomposition, Graph& g) {
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream oss;
+    oss << put_time(&tm, "%d-%m-%Y %H-%M-%S");
+    string filename = "results/decompositions/tree_" + oss.str() + ".csv";
+    ofstream outFile(filename);
+    if (!outFile.is_open()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return;
+    }
+
+    graph_traits <Graph>::vertex_iterator i,end;
+
+    auto prop_map = get(vertex_bundle, decomposition);
+    map<Vertex,string> node_map;
+
+
+    int index = 1;
+    for (tie(i,end) = vertices(decomposition); i != end; i++) {
+        string nodeLabel = "N" + to_string(index);
+        node_map[*i] = nodeLabel;
+        index++;
+    }
+
+    graph_traits <Graph>::edge_iterator edge_i, edge_end;
+
+    for (tie(edge_i, edge_end) = edges(decomposition); edge_i != edge_end; edge_i++) {
+        Vertex source_v = source(*edge_i, decomposition);
+        Vertex target_v = target(*edge_i, decomposition);
+        string source_label = node_map[source_v];
+        string target_label = node_map[target_v];
+        outFile << source_label << "," << target_label << "," << endl;
+    }
+
+    index = 1;
+    for (tie(i,end) = vertices(decomposition); i != end; i++) {
+        VertexProperties vp_i = prop_map[*i];
+        vector<string> labels = vp_i.nodes;
+
+        string labels_string = vector_to_string(labels);
+        string nodeLabel = "N" + index;
+
+        outFile << ("N" + to_string(index)) << ",," << labels_string << endl;
+        index++;
+    }
+
 }
 
 void print_usage() {
@@ -76,7 +155,6 @@ void print_usage() {
               << "Options:\n"
               << "  --graph <input graph>                               Input file of graph\n"
               << "  --heuristic=min-deg|min-fill|max-card               Set elimination ordering\n"
-              << "  --output <targetFolder>                             Folder where results are stored\n"
               << "  --evaluation                                        Perform evaluation\n"
               << "  --help                                              Display this help message\n";
 }
@@ -556,13 +634,9 @@ void run_experiment() {
             string min_fill_in_results = "min_fill_in_" + to_string(n) + "_" + to_string(p) + "_results.dat";
             string max_card_results = "max_card_" + to_string(n) + "_" + to_string(p) + "_results.dat";
 
-            save_data("results/" + min_deg_results, min_deg_dps);
-            save_data("results/" + min_fill_in_results, min_fill_in_dps);
-            save_data("results/" + max_card_results, max_card_dps);
-
-            //plot_data("min_deg_vs_min_fill_in.dat", "min_deg_dps", "min_fill_in_dps", "min_deg_vs_min_fill_in");
-            //plot_data("min_deg_vs_max_card.dat", "min_deg_dps", "max_card_dps", "min_deg_vs_max_card");
-            //plot_data("min_fill_in_vs_max_card.dat", "min_fill_in_dps", "max_card_dps", "min_fill_in_vs_max_card");
+            save_data("results/eval/" + min_deg_results, min_deg_dps);
+            save_data("results/eval/" + min_fill_in_results, min_fill_in_dps);
+            save_data("results/eval/" + max_card_results, max_card_dps);
         }
     }
 
@@ -574,7 +648,6 @@ int main(int argc, char* argv[]) {
     int option_index = 0;
     string graph_input;
     string elimination_ordering_type = "min-deg"; // default value
-    string output;
     bool treeDecomposition = false;
     bool evaluation = false;
 
@@ -583,7 +656,6 @@ int main(int argc, char* argv[]) {
         {"graph", required_argument, 0, 'g'},
         {"heuristic", required_argument, 0, 'e'},
         {"treeDecomposition", no_argument, 0, 't'},
-        {"output", required_argument, 0, 'o'},
         {"evaluation", no_argument, 0, 'v'},
         {0, 0, 0, 0}
     };
@@ -606,9 +678,6 @@ int main(int argc, char* argv[]) {
             case 't':
                 treeDecomposition = true;
                 break;
-            case 'o':
-                output = optarg;
-                break;
             case 'v':
                 evaluation = true;
                 break;
@@ -630,7 +699,7 @@ int main(int argc, char* argv[]) {
     cout << "Elimination ordering: " << elimination_ordering_type << endl;
     cout << "Tree decomposition generated: " << (treeDecomposition? "yes" : "no") << endl;
     cout << "Evaluation: " << (evaluation ? "enabled" : "disabled") << endl;
-    cout << "Results stored: " << (output.empty()? "---" : output) << endl << endl;
+
 
     if (evaluation) {
         cout << "Start evaluation:" << endl;
@@ -658,6 +727,7 @@ int main(int argc, char* argv[]) {
 
         cout << "Elimination ordering:" << endl;
         cout << join(g, elimination_ordering, ",") << endl;
+        store_ordering(elimination_ordering, g, elimination_ordering_type);
 
 
         // TODO create a tree decomposition from ordering#
@@ -665,15 +735,9 @@ int main(int argc, char* argv[]) {
 
         if (treeDecomposition) {
             decomposition = create_tree_decomposition(g, g, elimination_ordering);
-            print_graph(decomposition);
             cout << get_tree_width(decomposition) << endl;
+            store_decomposition(decomposition, g);
         }
-
-
-        if (!output.empty()) {
-            // store resulting tree decomposition in
-        }
-
     }
 
     return 0;
