@@ -5,17 +5,23 @@
 - R (for generating plots)
 
 ## Usage
-treewidth (-v | -g <graph> [-e <min-deg,min-fill,max-card>] -t) -h
+treewidth ((-v) | (-g <graph> [-e <min-deg,min-fill,max-card>] -t)) -h
+
 h ... Help
+
 v ... run evaluation mode
+
 g <graph> ... specify input graph
+
 h <heuristic> ... specify either one of the available heuristics "min-deg", "min-fill", "max-card"
+
 t ... generate a tree decomposition from the generated ordering
 
 ## How to use it (extended)
 
 ### Evaluation Mode
 Using the -v flag, the program is run in the evaluation mode. 
+
 It creates 100 random graphs using the Erdos-Renyi Model using the values n=[10,100,100] and p=[0.25,0.50,0.75]. 
 All 3 heuristics are applied on the generated graphs and a tree decomposition is genereated for each. The aggregated treewidths for each pair of settings and each heuristic is saved
 into a file which is stored in the results/eval folder.
