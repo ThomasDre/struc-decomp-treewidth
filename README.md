@@ -38,9 +38,9 @@ The results are stored under:
 - results/eliminationOrderings: this will always be generated
 - results/decompositions: the csv containing the tree decomposition will only be generated if the -t flag is set
 
-  ## Graphs
-  The graphs stick to the format as described in https://github.com/ciaranm/glasgow-subgraph-solver?tab=readme-ov-file#file-formats
+## Graphs
+The graphs stick to the format as described in https://github.com/ciaranm/glasgow-subgraph-solver?tab=readme-ov-file#file-formats
 
-  For using the tool, already two sample graphs are provided which can be used as input:
-  - graphs/g1.csv: mimics the 1,2,3,4,5,6 graph from the slides of computing_treewith
-  - graphs/g2.csv: mimics the 1,2,3,4,5,6,7,8,9 graph from slides of computing_treewith
+For using the tool, already two sample graphs are provided which can be used as input:
+- graphs/g1.csv: mimics the 1,2,3,4,5,6 graph from the slides of computing_treewith
+- graphs/g2.csv: mimics the 1,2,3,4,5,6,7,8,9 graph from slides of computing_treewith
