@@ -588,35 +588,35 @@ void run_experiment() {
                 Graph g2 = Graph(g);
 
 
-                std::chrono::steady_clock::time_point begin_t1 = std::chrono::steady_clock::now();
+                //std::chrono::steady_clock::time_point begin_t1 = std::chrono::steady_clock::now();
                 vector<Vertex> min_deg_ordering = min_degree_elimination_heuristic(g, g);
-                std::chrono::steady_clock::time_point end_t1 = std::chrono::steady_clock::now();
-                std::cout << "Time difference min_deg_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t1 - begin_t1).count())/1000000.0 << "[s]" << std::endl;
+                //std::chrono::steady_clock::time_point end_t1 = std::chrono::steady_clock::now();
+                //std::cout << "Time difference min_deg_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t1 - begin_t1).count())/1000000.0 << "[s]" << std::endl;
 
-                std::chrono::steady_clock::time_point begin_t2 = std::chrono::steady_clock::now();
+                //std::chrono::steady_clock::time_point begin_t2 = std::chrono::steady_clock::now();
                 vector<Vertex> min_fill_in_ordering = min_fill_in_eliminiation_heuristic(g1, g1);
-                std::chrono::steady_clock::time_point end_t2 = std::chrono::steady_clock::now();
-                std::cout << "Time difference min_fill_in_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t2 - begin_t2).count())/1000000.0  << "[s]" << std::endl;
+                //std::chrono::steady_clock::time_point end_t2 = std::chrono::steady_clock::now();
+                //std::cout << "Time difference min_fill_in_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t2 - begin_t2).count())/1000000.0  << "[s]" << std::endl;
 
-                std::chrono::steady_clock::time_point begin_t3 = std::chrono::steady_clock::now();
+                //std::chrono::steady_clock::time_point begin_t3 = std::chrono::steady_clock::now();
                 vector<Vertex> max_card_ordering = max_card_heuristic(g2, g2);
-                std::chrono::steady_clock::time_point end_t3 = std::chrono::steady_clock::now();
-                std::cout << "Time difference max_card_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t3 - begin_t3).count())/1000000.0  << "[s]" << std::endl;
+                //std::chrono::steady_clock::time_point end_t3 = std::chrono::steady_clock::now();
+                //std::cout << "Time difference max_card_ordering= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_t3 - begin_t3).count())/1000000.0  << "[s]" << std::endl;
 
-                std::chrono::steady_clock::time_point begin_dec1 = std::chrono::steady_clock::now();
+                //std::chrono::steady_clock::time_point begin_dec1 = std::chrono::steady_clock::now();
                 Graph min_deg_tree_decomposition = create_tree_decomposition(g, g, min_deg_ordering);
-                std::chrono::steady_clock::time_point end_dec1 = std::chrono::steady_clock::now();
-                std::cout << "Time difference min_deg_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec1 - begin_dec1).count())/1000000.0  << "[s]" << std::endl;
+                //std::chrono::steady_clock::time_point end_dec1 = std::chrono::steady_clock::now();
+                //std::cout << "Time difference min_deg_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec1 - begin_dec1).count())/1000000.0  << "[s]" << std::endl;
 
-                std::chrono::steady_clock::time_point begin_dec2 = std::chrono::steady_clock::now();
+                //std::chrono::steady_clock::time_point begin_dec2 = std::chrono::steady_clock::now();
                 Graph min_fill_in_tree_decomposition = create_tree_decomposition(g1, g1, min_fill_in_ordering);
-                std::chrono::steady_clock::time_point end_dec2 = std::chrono::steady_clock::now();
-                std::cout << "Time difference min_fill_in_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec2 - begin_dec2).count())/1000000.0  << "[s]" << std::endl;
+                //std::chrono::steady_clock::time_point end_dec2 = std::chrono::steady_clock::now();
+                //std::cout << "Time difference min_fill_in_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec2 - begin_dec2).count())/1000000.0  << "[s]" << std::endl;
 
-                std::chrono::steady_clock::time_point begin_dec3 = std::chrono::steady_clock::now();
+                //std::chrono::steady_clock::time_point begin_dec3 = std::chrono::steady_clock::now();
                 Graph max_card_tree_decomposition = create_tree_decomposition(g2, g2, max_card_ordering);
-                std::chrono::steady_clock::time_point end_dec3 = std::chrono::steady_clock::now();
-                std::cout << "Time difference max_card_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec3 - begin_dec3).count())/1000000.0  << "[ss]" << std::endl;
+                //std::chrono::steady_clock::time_point end_dec3 = std::chrono::steady_clock::now();
+                //std::cout << "Time difference max_card_composition= " << (std::chrono::duration_cast<std::chrono::microseconds>(end_dec3 - begin_dec3).count())/1000000.0  << "[ss]" << std::endl;
 
                 int tw_min_deg = get_tree_width(min_deg_tree_decomposition);
                 int tw_min_fill_in = get_tree_width(min_fill_in_tree_decomposition);
@@ -625,9 +625,6 @@ void run_experiment() {
                 min_deg_dps.push_back(tw_min_deg);
                 min_fill_in_dps.push_back(tw_min_fill_in);
                 max_card_dps.push_back(tw_max_card);
-
-                cout << tw_min_deg << "," << tw_min_fill_in << "," << tw_max_card << endl;
-            //
             }
 
             string min_deg_results = "min_deg_" + to_string(n) + "_" + to_string(p) + "_results.dat";
