@@ -79,7 +79,7 @@ std::string vector_to_string(const vector<string>& vec) {
     return result.str();
 }
 
-void store_ordering(vector<Vertex>& elimination_ordering, Graph& g, string type) {
+string store_ordering(vector<Vertex>& elimination_ordering, Graph& g, string type) {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
     std::ostringstream oss;
@@ -88,7 +88,7 @@ void store_ordering(vector<Vertex>& elimination_ordering, Graph& g, string type)
     ofstream outFile(filename);
     if (!outFile.is_open()) {
         std::cerr << "Failed to open file: " << filename << std::endl;
-        return;
+        return "";
     }
 
     auto prop_map = get(vertex_bundle, g);
@@ -99,9 +99,11 @@ void store_ordering(vector<Vertex>& elimination_ordering, Graph& g, string type)
     }
 
     outFile.close();
+
+    return filename;
 }
 
-void store_decomposition(Graph& decomposition, Graph& g) {
+string store_decomposition(Graph& decomposition, Graph& g) {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
     std::ostringstream oss;
@@ -110,7 +112,7 @@ void store_decomposition(Graph& decomposition, Graph& g) {
     ofstream outFile(filename);
     if (!outFile.is_open()) {
         std::cerr << "Failed to open file: " << filename << std::endl;
-        return;
+        return "";
     }
 
     graph_traits <Graph>::vertex_iterator i,end;
@@ -148,6 +150,7 @@ void store_decomposition(Graph& decomposition, Graph& g) {
         index++;
     }
 
+    return filename;
 }
 
 void print_usage() {
@@ -178,8 +181,6 @@ void update_prop_map(Graph& orig_g, Graph& g) {
 }
 
 void print_graph(Graph& g) {
-      // Output the graph
-        //auto vertex_idMap = get(vertex_index, g);
         graph_traits <Graph>::vertex_iterator i, end;
         graph_traits <Graph>::adjacency_iterator ai, a_end;
 
@@ -202,6 +203,20 @@ void print_graph(Graph& g) {
         }
 }
 
+void print_csv(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Could not open the file: " << filename << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::cout << line << std::endl;
+    }
+
+    file.close();
+}
 
 vector<string> get_tokens_from_line(string s) {
     stringstream ss(s);
@@ -521,7 +536,7 @@ Graph create_tree_decomposition(Graph& g, Graph& help, Graph& decomposition, vec
     Vertex vertex = ordering.front();
     ordering.erase(ordering.begin());
 
-    //  TODO i want to copy g at this stage before removing edges in the next line
+
     Graph g_copy = Graph(g);
     create_lookup_table(g_copy,g);
 
@@ -652,7 +667,6 @@ int main(int argc, char* argv[]) {
         {"help", no_argument, 0, 'h'},
         {"graph", required_argument, 0, 'g'},
         {"heuristic", required_argument, 0, 'e'},
-        {"treeDecomposition", no_argument, 0, 't'},
         {"evaluation", no_argument, 0, 'v'},
         {0, 0, 0, 0}
     };
@@ -671,9 +685,6 @@ int main(int argc, char* argv[]) {
                     cerr << "Invalid value for --eliminationOrdering: " << elimination_ordering_type << "\n";
                     return 1;
                 }
-                break;
-            case 't':
-                treeDecomposition = true;
                 break;
             case 'v':
                 evaluation = true;
@@ -694,8 +705,7 @@ int main(int argc, char* argv[]) {
     // Process the options
     cout << "Input graph: " << graph_input << endl;
     cout << "Elimination ordering: " << elimination_ordering_type << endl;
-    cout << "Tree decomposition generated: " << (treeDecomposition? "yes" : "no") << endl;
-    cout << "Evaluation: " << (evaluation ? "enabled" : "disabled") << endl;
+    cout << "Evaluation mode: " << (evaluation ? "yes" : "no") << endl;
 
 
     if (evaluation) {
@@ -722,18 +732,31 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        cout << "Elimination ordering:" << endl;
+        // store ordering
+        string ordering_file_name = store_ordering(elimination_ordering, g, elimination_ordering_type);
+
+        cout << endl << "Elimination ordering:" << endl;
         cout << join(g, elimination_ordering, ",") << endl;
-        store_ordering(elimination_ordering, g, elimination_ordering_type);
+        cout << "**********************" << endl;
 
 
-        // TODO create a tree decomposition from ordering#
         Graph decomposition;
+        decomposition = create_tree_decomposition(g, g, elimination_ordering);
+        string tree_decomposition_file_name = store_decomposition(decomposition, g);
 
-        if (treeDecomposition) {
-            decomposition = create_tree_decomposition(g, g, elimination_ordering);
-            cout << get_tree_width(decomposition) << endl;
-            store_decomposition(decomposition, g);
+        cout << "Tree Width:" << endl;
+        cout << get_tree_width(decomposition) << endl;
+        cout <<  "**********************" << endl;
+
+        cout << "Tree decomposition:" << endl;
+        print_csv(tree_decomposition_file_name);
+        cout << "**********************" << endl;
+
+        if (!ordering_file_name.empty()) {
+            cout << "Ordering saved: " << ordering_file_name << endl;
+        }
+        if (!tree_decomposition_file_name.empty()) {
+            cout << "Tree decomposition saved: " << tree_decomposition_file_name << endl;
         }
     }
 
