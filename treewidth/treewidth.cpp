@@ -188,17 +188,20 @@ void print_graph(Graph& g) {
             cout << "Empty graph" << endl;
         } else {
             for (tie(i, end) = vertices(g); i != end; ++i) {
+                string line = "";
                 auto prop_map = get(vertex_bundle, g);
                 VertexProperties vp_i = prop_map[*i];
-                cout << vp_i.label << ": ";
+                line.append(vp_i.label);
+                line.append(": ");
 
                 for (tie(ai, a_end) = adjacent_vertices(*i, g); ai != a_end; ++ai) {
                     VertexProperties vp_ai = prop_map[*ai];
-                    cout << vp_ai.label;
-                    if (boost::next(ai) != a_end)
-                        cout << ", ";
+                    line.append(vp_ai.label);
+                    if (boost::next(ai) != a_end) {
+                        line.append(",");
+                    }
                 }
-                cout << endl;
+                cout << line << endl;
             }
         }
 }
@@ -325,6 +328,9 @@ void read_input(string file, Graph& g) {
             v2 = tokens[1];
             if (tokens.size() == 3) {
                 label = tokens[2];
+                if (!label.empty() && label[label.size() - 1] == '\r') {
+                    label.erase(label.size()-1);
+                }
             } else {
                 label = "";
             }
@@ -334,6 +340,9 @@ void read_input(string file, Graph& g) {
             v1 = tokens[0];
             if (tokens.size() == 3) {
                 label = tokens[2];
+                if (!label.empty() && label[label.size() - 1] == '\r') {
+                    label.erase(label.size()-1);
+                }
             } else {
                 label = "";
             }
