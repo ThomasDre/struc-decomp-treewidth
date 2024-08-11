@@ -34,6 +34,56 @@ typedef graph_traits<Graph>::adjacency_iterator AdjacencyIterator;
 
 map<Vertex, Vertex> lookup;
 
+
+/**
+--------------------------------------------------
+-               Utils and Usage                  -
+--------------------------------------------------
+**/
+
+// helper function
+string join(Graph& g, const vector<Vertex>& v, const string& delim) {
+    ostringstream s;
+    int index = 0;
+    for (const Vertex i : v) {
+        auto prop_map = get(vertex_bundle, g);
+        VertexProperties vp = prop_map[i];
+        s << vp.label;
+        if (index < (v.size() - 1)) {
+            s << delim;
+        }
+        index++;
+    }
+    return s.str();
+}
+
+// helper function
+std::string vector_to_string(const vector<string>& vec) {
+    stringstream result;
+    for (size_t i = 0; i < vec.size(); ++i) {
+        result << vec[i];
+        if (i < vec.size() - 1) {
+            result << ";";
+        }
+    }
+    return result.str();
+}
+
+void print_usage() {
+    std::cout << "Usage: program [options]\n"
+              << "Options:\n"
+              << "  --graph <input graph>                               Input file of graph\n"
+              << "  --heuristic=min-deg|min-fill|max-card               Set elimination ordering\n"
+              << "  --evaluation                                        Perform evaluation\n"
+              << "  --help                                              Display this help message\n";
+}
+
+/**
+Method used to create a look up table that stores which vertex of original graph corresponds to new vertex in copied/updated graph
+
+This is necessary to keep original vertices of the input graph, vertices of the elimination ordering and vertices of temporary graphs
+(e.g. during the eliminate and reconnect phase) in synch.
+**/
 void create_lookup_table(Graph& orig, Graph& g) {
     graph_traits <Graph>::vertex_iterator i,end;
     vector<Vertex> orig_vertices;
@@ -50,35 +100,44 @@ void create_lookup_table(Graph& orig, Graph& g) {
         Vertex g_v = g_vertices[i];
         lookup[g_v] = orig_v;
     }
-
 }
 
-string join(Graph& g, const vector<Vertex>& v, const string& delim) {
-    ostringstream s;
+/**
+Method that updates lookup table of the vertices of a given graph when the addresses of the nodes change (upon copying, recreating the graph, etc.)
+**/
+void update_prop_map(Graph& orig_g, Graph& g) {
+    auto prop_map = get(vertex_bundle, orig_g);
+    graph_traits <Graph>::vertex_iterator i, end;
+
+    vector<VertexProperties> vps;
+    for (tie(i,end) = vertices(orig_g); i!= end; i++) {
+        VertexProperties vp_i = prop_map[*i];
+        vps.push_back(vp_i);
+    }
+
     int index = 0;
-    for (const Vertex i : v) {
-        auto prop_map = get(vertex_bundle, g);
-        VertexProperties vp = prop_map[i];
-        s << vp.label;
-        if (index < (v.size() - 1)) {
-            s << delim;
-        }
+    for (tie(i,end) = vertices(g); i != end; i++) {
+        VertexProperties vp_i = vps[index];
+        prop_map[*i] = vp_i;
         index++;
     }
-    return s.str();
 }
 
-std::string vector_to_string(const vector<string>& vec) {
-    stringstream result;
-    for (size_t i = 0; i < vec.size(); ++i) {
-        result << vec[i];
-        if (i < vec.size() - 1) {
-            result << ";";
-        }
-    }
-    return result.str();
-}
 
+
+
+
+
+
+/**
+--------------------------------------------------
+-     Parsing Input And Storing Results          -
+--------------------------------------------------
+**/
+
+/**
+Stores the given elimination ordering in a txt file
+**/
 string store_ordering(vector<Vertex>& elimination_ordering, Graph& g, string type) {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
@@ -103,6 +162,9 @@ string store_ordering(vector<Vertex>& elimination_ordering, Graph& g, string typ
     return filename;
 }
 
+/**
+Stores the given tree decomposition in a csv file
+**/
 string store_decomposition(Graph& decomposition, Graph& g) {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
@@ -153,33 +215,22 @@ string store_decomposition(Graph& decomposition, Graph& g) {
     return filename;
 }
 
-void print_usage() {
-    std::cout << "Usage: program [options]\n"
-              << "Options:\n"
-              << "  --graph <input graph>                               Input file of graph\n"
-              << "  --heuristic=min-deg|min-fill|max-card               Set elimination ordering\n"
-              << "  --evaluation                                        Perform evaluation\n"
-              << "  --help                                              Display this help message\n";
-}
 
-void update_prop_map(Graph& orig_g, Graph& g) {
-    auto prop_map = get(vertex_bundle, orig_g);
-    graph_traits <Graph>::vertex_iterator i, end;
-
-    vector<VertexProperties> vps;
-    for (tie(i,end) = vertices(orig_g); i!=end; i++) {
-        VertexProperties vp_i = prop_map[*i];
-        vps.push_back(vp_i);
-    }
-
-    int index = 0;
-    for (tie(i,end) = vertices(g); i != end; i++) {
-        VertexProperties vp_i = vps[index];
-        prop_map[*i] = vp_i;
-        index++;
+void save_data(const std::string &filename, const std::vector<int> &x) {
+    std::ofstream file(filename);
+    if (file.is_open()) {
+        for (size_t i = 0; i < x.size(); ++i) {
+            file << x[i] << endl;
+        }
+        file.close();
+    } else {
+        std::cerr << "Unable to open file: " << filename << "\n";
     }
 }
 
+
+
+// print the given graph
 void print_graph(Graph& g) {
         graph_traits <Graph>::vertex_iterator i, end;
         graph_traits <Graph>::adjacency_iterator ai, a_end;
@@ -206,6 +257,7 @@ void print_graph(Graph& g) {
         }
 }
 
+// print content of given csv file
 void print_csv(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
@@ -221,6 +273,9 @@ void print_csv(const std::string& filename) {
     file.close();
 }
 
+/**
+Return the individual parts (tokens) of a line in a csv fomat
+**/
 vector<string> get_tokens_from_line(string s) {
     stringstream ss(s);
     string token;
@@ -234,6 +289,7 @@ vector<string> get_tokens_from_line(string s) {
     return tokens;
 }
 
+// Function to add a edge with a label
 void add_edge(Graph& g, const string& v1, const string& v2, const string& label,
               map<string, Vertex>& vertex_map) {
     Vertex vertex1, vertex2;
@@ -284,24 +340,10 @@ Graph::vertex_descriptor add_vertex(const VertexProperties& p, Graph& g) {
     return v;
 }
 
-int get_tree_width(Graph& decomposition) {
-    graph_traits <Graph>::vertex_iterator i, end;
-    auto prop_map = get(vertex_bundle, decomposition);
-    int max_bag_size = 0;
-
-    for (tie(i,end) = vertices(decomposition); i != end; i++) {
-        VertexProperties vp_i = prop_map[*i];
-        vector<string> labels = vp_i.nodes;
-        if (labels.size() > max_bag_size) {
-            max_bag_size = labels.size();
-        }
-    }
-
-    return max_bag_size - 1;
-}
-
+/**
+Method to parse given csv file
+**/
 void read_input(string file, Graph& g) {
-    // Open the CSV file
     ifstream infile(file);
     if (!infile.is_open()) {
         cerr << "Error opening file." << endl;
@@ -350,12 +392,70 @@ void read_input(string file, Graph& g) {
         }
     }
 
-
-
     infile.close();
 }
 
 
+
+
+
+
+/**
+--------------------------------------------------
+-        Tree decomposition specific function    -
+--------------------------------------------------
+**/
+
+
+
+/**
+Returns the tree width of a given tree decomposition.
+Note: width = |size of biggest bag| - 1
+**/
+int get_tree_width(Graph& decomposition) {
+    graph_traits <Graph>::vertex_iterator i, end;
+    auto prop_map = get(vertex_bundle, decomposition);
+    int max_bag_size = 0;
+
+    for (tie(i,end) = vertices(decomposition); i != end; i++) {
+        VertexProperties vp_i = prop_map[*i];
+        vector<string> labels = vp_i.nodes;
+        if (labels.size() > max_bag_size) {
+            max_bag_size = labels.size();
+        }
+    }
+
+    return max_bag_size - 1;
+}
+
+
+/**
+Helper method used during tree decomposition conversion, to find node of given decomposition tree whose bag contains all neighbours of given vertex
+**/
+Vertex find_decomposition_node(Graph& g, Graph& decomposition, Vertex vertex) {
+    graph_traits <Graph>::vertex_iterator v, end;
+    auto prop_map = get(vertex_bundle, g);
+    for (tie(v,end) = vertices(decomposition); v != end; v++) {
+        VertexProperties vp = decomposition[*v];
+        vector<string> labels = vp.nodes;
+        pair<AdjacencyIterator, AdjacencyIterator> adjacent_to_vertex = adjacent_vertices(vertex, g);
+        bool all_contained = true;
+        for (AdjacencyIterator ai = adjacent_to_vertex.first; ai != adjacent_to_vertex.second; ai++) {
+            VertexProperties vp_ai = prop_map[*ai];
+            if (find(labels.begin(), labels.end(), vp_ai.label) == labels.end()) {
+                all_contained = false;
+            }
+        }
+        if (all_contained) {
+            return *v;
+        }
+    }
+    return vertex;
+}
+
+/**
+The given vertex v is removed from the graph g and the graph g is reconnected by adding fill-in-edges
+**/
 void remove_vertex_and_reconnect_graph(Graph& g, Vertex v) {
     pair<AdjacencyIterator, AdjacencyIterator> neighbours_of_v = adjacent_vertices(v, g);
 
@@ -372,7 +472,9 @@ void remove_vertex_and_reconnect_graph(Graph& g, Vertex v) {
     remove_vertex(v, g);
 }
 
-
+/**
+Returns the vertex with the minimum degree
+**/
 Vertex find_min_deg_vertex(Graph& g) {
     graph_traits <Graph>::vertex_iterator i, end;
     Vertex min_deg_vertex;
@@ -387,6 +489,9 @@ Vertex find_min_deg_vertex(Graph& g) {
     return min_deg_vertex;
 }
 
+/**
+Returns the vertex which produces the minimum number of fill-in-edges upon its removal
+**/
 Vertex find_min_fill_in_vertex(Graph& g) {
     graph_traits <Graph>::vertex_iterator v, end;
     Vertex min_fill_in_vertex;
@@ -425,11 +530,13 @@ Vertex find_min_fill_in_vertex(Graph& g) {
     return min_fill_in_vertex;
 }
 
+/**
+Returns the vertex which has the maximum number of its neighbors already contained in the given elimination ordering list.
+**/
 Vertex find_max_neighbours_in_ordering_vertex(Graph& g, vector<Vertex>& ordering) {
     graph_traits <Graph>::vertex_iterator v, end;
     Vertex max_neighbours_in_ordering_vertex;
     int max_num_of_neighbours_in_ordering = -1;
-
 
     for (tie(v,end) = vertices(g); v != end; v++) {
         if (find(ordering.begin(), ordering.end(), *v) != ordering.end()) {
@@ -444,7 +551,6 @@ Vertex find_max_neighbours_in_ordering_vertex(Graph& g, vector<Vertex>& ordering
                 neighbours_in_ordering_vertex++;
             }
         }
-        // get num of neighbours of v in ordering
 
         if (neighbours_in_ordering_vertex > max_num_of_neighbours_in_ordering) {
             max_num_of_neighbours_in_ordering = neighbours_in_ordering_vertex;
@@ -455,6 +561,23 @@ Vertex find_max_neighbours_in_ordering_vertex(Graph& g, vector<Vertex>& ordering
     return max_neighbours_in_ordering_vertex;
 }
 
+
+
+
+
+
+
+
+/**
+--------------------------------------------------
+-                 Heuristics                     -
+--------------------------------------------------
+**/
+
+
+/**
+Creates an elimination ordering based on the minimum-degree heuristic
+**/
 vector<Vertex> min_degree_elimination_heuristic(Graph g, Graph& orig) {
     update_prop_map(orig, g);
     create_lookup_table(orig,g);
@@ -471,6 +594,9 @@ vector<Vertex> min_degree_elimination_heuristic(Graph g, Graph& orig) {
     return ordering;
 }
 
+/**
+Creates an elimination ordering based on the minimum-fill-in-edges heuristic
+**/
 vector<Vertex> min_fill_in_eliminiation_heuristic(Graph g, Graph& orig) {
     update_prop_map(orig, g);
     create_lookup_table(orig,g);
@@ -487,7 +613,9 @@ vector<Vertex> min_fill_in_eliminiation_heuristic(Graph g, Graph& orig) {
     return ordering;
 }
 
-
+/**
+Creates an elimination ordering based on the maximum cardinality heuristic
+**/
 vector<Vertex> max_card_heuristic(Graph g, Graph& orig) {
     update_prop_map(orig, g);
     create_lookup_table(orig,g);
@@ -508,27 +636,12 @@ vector<Vertex> max_card_heuristic(Graph g, Graph& orig) {
     return ordering;
 }
 
-Vertex find_decomposition_node(Graph& g, Graph& decomposition, Vertex vertex) {
-    graph_traits <Graph>::vertex_iterator v, end;
-    auto prop_map = get(vertex_bundle, g);
-    for (tie(v,end) = vertices(decomposition); v != end; v++) {
-        VertexProperties vp = decomposition[*v];
-        vector<string> labels = vp.nodes;
-        pair<AdjacencyIterator, AdjacencyIterator> adjacent_to_vertex = adjacent_vertices(vertex, g);
-        bool all_contained = true;
-        for (AdjacencyIterator ai = adjacent_to_vertex.first; ai != adjacent_to_vertex.second; ai++) {
-            VertexProperties vp_ai = prop_map[*ai];
-            if (find(labels.begin(), labels.end(), vp_ai.label) == labels.end()) {
-                all_contained = false;
-            }
-        }
-        if (all_contained) {
-            return *v;
-        }
-    }
-    return vertex;
-}
 
+/**
+--------------------------------------------------
+-             Tree Decomposition                 -
+--------------------------------------------------
+**/
 
 Graph create_tree_decomposition(Graph& g, Graph& help, Graph& decomposition, vector<Vertex> ordering) {
     auto prop_map = get(vertex_bundle, g);
@@ -569,36 +682,22 @@ Graph create_tree_decomposition(Graph& g, Graph& help, Graph& decomposition, vec
     return decomposition;
 }
 
+/**
+Generates a tree decomposition from given ordering for the given input graph
+**/
 Graph create_tree_decomposition(Graph& g, Graph help, vector<Vertex> ordering) {
     Graph tree_decomposition;
     create_tree_decomposition(g, help, tree_decomposition, ordering);
     return tree_decomposition;
 }
 
-void save_data(const std::string &filename, const std::vector<int> &x) {
-    std::ofstream file(filename);
-    if (file.is_open()) {
-        for (size_t i = 0; i < x.size(); ++i) {
-            file << x[i] << endl;
-        }
-        file.close();
-    } else {
-        std::cerr << "Unable to open file: " << filename << "\n";
-    }
-}
-
-void plot_data(const std::string &filename, const std::string &xlabel, const std::string &ylabel, const std::string &title) {
-    std::string command = "gnuplot -e \"set terminal png; set output '";
-    command += title + ".png'; set title '" + title + "'; set xlabel '" + xlabel + "'; set ylabel '" + ylabel + "'; plot '";
-    command += filename + "' using 1:2 with points pt 7\"";
-    system(command.c_str());
-}
-
+/**
+Runs the experiments for given settings of number of nodes (10,100,1000) and connectivity probability (0.25,0.5,0.75) by generating instances of Erdos-Renyi based tree instances
+**/
 void run_experiment() {
     minstd_rand gen;
-    // Create graph with 100 nodes and edges with probability 0.05
-    vector<int> n_values = {1000,10,1000};
-    vector<double> p_values = {0.75,0.5,0.75};
+    vector<int> n_values = {10,100,1000};
+    vector<double> p_values = {0.25,0.5,0.75};
 
     for (const int& n: n_values) {
         for (const double& p: p_values) {
@@ -606,11 +705,13 @@ void run_experiment() {
             vector<int> min_deg_dps;
             vector<int> min_fill_in_dps;
             vector<int> max_card_dps;
+
+            cout << "Run experiment for n=" << n << ", p=" << p << endl;
+
             for (int i = 0; i < 100; i++) {
                 Graph g(ERGen(gen, n, p), ERGen(), n);
                 Graph g1 = Graph(g);
                 Graph g2 = Graph(g);
-
 
                 //std::chrono::steady_clock::time_point begin_t1 = std::chrono::steady_clock::now();
                 vector<Vertex> min_deg_ordering = min_degree_elimination_heuristic(g, g);
@@ -660,8 +761,8 @@ void run_experiment() {
             save_data("results/eval/" + max_card_results, max_card_dps);
         }
     }
-
 }
+
 
 int main(int argc, char* argv[]) {
 
@@ -669,7 +770,6 @@ int main(int argc, char* argv[]) {
     int option_index = 0;
     string graph_input;
     string elimination_ordering_type = "min-deg"; // default value
-    bool treeDecomposition = false;
     bool evaluation = false;
 
     struct option long_options[] = {
